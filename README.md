@@ -7,6 +7,7 @@
 -   [Muhammad Luqmaan - 123230070]
 -   [Salman Faris - 123230024]
 -   [Reza Rasendriya Adi Putra - 123230030]
+-   [Muhammad Luqmaan - 123230013]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
@@ -15,6 +16,7 @@ Website ini adalah aplikasi berbasis Streamlit yang dirancang untuk visualisasi 
 ## Fitur
 
 -   **Input Data Fleksibel**: Tambahkan titik manual via sidebar atau **Upload File CSV/Excel** untuk dataset besar.
+-   **Kalkulator Volumetrik**: Menghitung estimasi Gross Rock Volume (GRV) untuk zona minyak, gas cap, dan total reservoir secara otomatis.
 -   **Pemetaan Kontur 2D**: Visualisasikan struktur reservoir dengan garis kontur 2D dan zona fluida (Gas Cap, Oil Zone, Aquifer).
 -   **Pemodelan Permukaan 3D**: Jelajahi reservoir dalam 3D dengan permukaan medan dan bidang GOC/WOC yang dapat disesuaikan.
 -   **Kontrol Kontak Fluida**: Sesuaikan level Gas-Oil Contact (GOC) dan Water-Oil Contact (WOC) secara dinamis.

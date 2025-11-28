@@ -138,6 +138,47 @@ else:
         except:
             grid_z = griddata((df_unique['X'], df_unique['Y']), df_unique['Z'], (grid_x, grid_y), method='linear')
 
+
+        # --- FITUR PERHITUNGAN VOLUME (VOLUMETRICS) ---
+        st.markdown("### 📊 Estimasi Volume (Gross Rock Volume)")
+        
+        # 1. Hitung dimensi sel grid
+        x_min, x_max = df['X'].min(), df['X'].max()
+        y_min, y_max = df['Y'].min(), df['Y'].max()
+        nx, ny = 100, 100
+        
+        dx = (x_max - x_min) / (nx - 1)
+        dy = (y_max - y_min) / (ny - 1)
+        cell_area = dx * dy  # Luas per satu kotak grid
+        
+        # 2. Hitung Volume di atas WOC (Total Reservoir Potensial)
+        # Rumus: (WOC - Depth). Jika Depth > WOC (di bawah kontak), tebal = 0.
+        thick_above_woc = woc_input - grid_z
+        thick_above_woc[thick_above_woc < 0] = 0  # Filter yang di bawah WOC
+        vol_total_res = np.nansum(thick_above_woc) * cell_area
+        
+        # 3. Hitung Volume di atas GOC (Gas Cap)
+        thick_above_goc = goc_input - grid_z
+        thick_above_goc[thick_above_goc < 0] = 0
+        vol_gas_cap = np.nansum(thick_above_goc) * cell_area
+        
+        # 4. Hitung Volume Oil (Selisih Total - Gas)
+        vol_oil_zone = max(0, vol_total_res - vol_gas_cap)
+
+        # 5. Tampilkan Metrics
+        col_vol1, col_vol2, col_vol3 = st.columns(3)
+        
+        # Helper untuk format juta (Million)
+        def fmt_vol(v):
+            return f"{v/1e6:.2f} Juta m³"
+
+        col_vol1.metric("🔴 Volume Gas Cap", fmt_vol(vol_gas_cap), 
+                        help=f"Volume batuan di atas kedalaman {goc_input} m")
+        col_vol2.metric("🟢 Volume Oil Zone", fmt_vol(vol_oil_zone), 
+                        help="Volume batuan di antara GOC dan WOC")
+        col_vol3.metric("🔵 Total Reservoir", fmt_vol(vol_total_res), 
+                        help=f"Total volume batuan di atas kedalaman {woc_input} m")
+        
         # --- TABS VISUALISASI ---
         tab1, tab2, tab3 = st.tabs(["🗺️ Peta Kontur 2D", "🧊 Model 3D", "📋 Data Mentah"])
 
