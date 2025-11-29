@@ -11,6 +11,8 @@
 -   [Rheza Priya Anargya - 123230032]
 -   [Gusti Rama - 123230040]
 -   [Bintoro - 123230059]
+-   [Imam Khusain - 123230018 ]
+-   [Adi Setya N.P - 123230026 ]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
