@@ -34,8 +34,8 @@ st.markdown("""
 # FUNGSI HELPER UNTUK EXPORT LAPORAN VOLUMETRIK
 # -------------------------------------------------------------------
 def create_volumetric_report_pdf(vol_gas_cap, vol_oil_zone, vol_total_res,
-                                 goc_input, woc_input,
-                                 num_points, x_range, y_range, z_range):
+                                goc_input, woc_input,
+                                num_points, x_range, y_range, z_range):
     """Membuat laporan volumetrik dalam format PDF (ringkasan)"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -468,12 +468,13 @@ else:
 
         # --- TABS VISUALISASI (5 TAB) ---
       # --- TABS VISUALISASI (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🗺 Peta Kontur 2D",
     "🧊 Model 3D",
     "📋 Data Mentah",
     "✂ Penampang (Baru)",
-    "🔥 Heatmap Property"
+    "🔥 Heatmap Property",
+    "⭕ Perbandingan 3D (Before After)"
 ])
 
 # pastikan ada minimal info untuk min_z / max_z (dipakai di beberapa tab)
@@ -685,28 +686,105 @@ if len(df) >= 4:
                                data=heat_df.to_csv(index=False),
                                file_name=f"heatmap_{option.replace(' ','')}{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                mime="text/csv")
+            
+      # === TAB 6: PERBANDINGAN 3D BEFORE–AFTER ===
+    with tab6:
+        st.subheader("⭕ Perbandingan 3D Sebelum–Sesudah")
+        st.info("Upload dua dataset untuk melihat perubahan struktur reservoir sebelum dan sesudah.")
 
+        colA, colB = st.columns(2)
+        with colA:
+            file_before = st.file_uploader("Upload Data Before", type=["csv"])
+        with colB:
+            file_after = st.file_uploader("Upload Data After", type=["csv"])
+
+    # ===== CEK FILE =====
+        if file_before is None or file_after is None:
+            st.warning("Silakan upload kedua file (Before & After) terlebih dahulu.")
+            st.stop()
+
+    # ===== BACA DATA =====
+        df_before = pd.read_csv(file_before)
+        df_after = pd.read_csv(file_after)
+
+        required = {"X", "Y", "Z"}
+        if not required.issubset(df_before.columns) or not required.issubset(df_after.columns):
+            st.error("CSV harus memiliki kolom: X, Y, Z.")
+            st.stop()
+
+    # ===== INTERPOLASI BEFORE =====
+        dfb = df_before.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xb, yb, zb = dfb["X"].values, dfb["Y"].values, dfb["Z"].values
+
+        gx_b, gy_b = np.meshgrid(
+            np.linspace(xb.min(), xb.max(), 100),
+            np.linspace(yb.min(), yb.max(), 100)
+        )
+        gz_b = griddata((xb, yb), zb, (gx_b, gy_b), method="linear")
+
+    # ===== INTERPOLASI AFTER =====
+        dfa = df_after.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xa, ya, za = dfa["X"].values, dfa["Y"].values, dfa["Z"].values
+
+        gx_a, gy_a = np.meshgrid(
+            np.linspace(xa.min(), xa.max(), 100),
+            np.linspace(ya.min(), ya.max(), 100)
+        )
+        gz_a = griddata((xa, ya), za, (gx_a, gy_a), method="linear")
+
+    # ===== PLOT BEFORE & AFTER =====
+        from plotly.subplots import make_subplots
+
+        fig = make_subplots(
+            rows=1, cols=2,
+            specs=[[{"type": "surface"}, {"type": "surface"}]],
+            subplot_titles=("Before", "After")
+        )
+
+        fig.add_trace(go.Surface(x=gx_b, y=gy_b, z=gz_b, colorscale="Viridis"), row=1, col=1)
+        fig.add_trace(go.Surface(x=gx_a, y=gy_a, z=gz_a, colorscale="Turbo"), row=1, col=2)
+
+        fig.update_layout(height=600, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ===== SELISIH =====
+        st.subheader("📉 Selisih Elevasi (After – Before)")
+    try:
+            diff = gz_a - gz_b
+            fig_diff = go.Figure(go.Surface(
+            x=gx_a, y=gy_a, z=diff, colorscale="RdBu"
+            ))
+            fig_diff.update_layout(height=600, title="Perbedaan Elevasi")
+            st.plotly_chart(fig_diff, use_container_width=True)
+    except:
+            st.warning("Grid Before dan After tidak cocok ukurannya.")
+
+  
 # --- jika data TIDAK cukup: tampilkan pesan di masing-masing tab (tab tetap ada) ---
 else:
     # small informative content per tab to avoid NameError / empty with-blocks
-    with tab1:
-        st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
-        st.dataframe(df, use_container_width=True)
+        with tab1:
+            st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
+            st.dataframe(df, use_container_width=True)
 
-    with tab2:
-        st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
+        with tab2:
+            st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
 
-    with tab3:
-        st.subheader("📋 Data Mentah")
-        st.dataframe(df, use_container_width=True)
-        if not df.empty:
-            st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
+        with tab3:
+            st.subheader("📋 Data Mentah")
+            st.dataframe(df, use_container_width=True)
+            if not df.empty:
+                    st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
 
-    with tab4:
-        st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
+        with tab4:
+            st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
 
-    with tab5:
-        st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+        with tab5:
+            st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+
+        with tab6:
+            st.info("Perbandingan 3D Before–After memerlukan dua dataset dengan kolom X,Y,Z.")
+
 
 # === TAB 5: FITUR EKSTENSI ===
 from extra_features import run_extra_features
@@ -714,3 +792,77 @@ from extra_features import run_extra_features
 tab_extra = st.tabs(["🧩 Fitur Ekstensi"])[0]
 with tab_extra:
     run_extra_features(df)
+
+
+# ============================
+#  PERHITUNGAN VOLUME RESERVOIR
+# ============================
+
+st.subheader("📦 Perhitungan Volume Reservoir")
+
+# Input parameter volumetrik
+col_v1, col_v2, col_v3 = st.columns(3)
+
+phi = col_v1.number_input("Porosity (ϕ)", 0.0, 1.0, 0.20)
+sw  = col_v2.number_input("Water Saturation (Sw)", 0.0, 1.0, 0.30)
+ntg = col_v3.number_input("Net-to-Gross (NTG)", 0.0, 1.0, 0.80)
+
+# ============================
+#  AUTO DETECT KOLom X, Y, Z
+# ============================
+
+possible_x = ["X", "x", "Easting", "easting", "Long", "long", "Longitude", "longitude"]
+possible_y = ["Y", "y", "Northing", "northing", "Lat", "lat", "Latitude", "latitude"]
+possible_z = ["Z", "z", "Depth", "depth", "TVD", "tvd", "Elevation", "elevation"]
+
+col_x = next((c for c in possible_x if c in df.columns), None)
+col_y = next((c for c in possible_y if c in df.columns), None)
+col_z = next((c for c in possible_z if c in df.columns), None)
+
+if col_x is None or col_y is None:
+    st.error("❌ Tidak menemukan kolom X/Y di file CSV. Harus ada koordinat X dan Y.")
+    st.stop()
+
+# Thickness (Z)
+if col_z:
+    thickness = df[col_z]
+else:
+    thickness = st.number_input("Masukkan thickness (jika kolom Z tidak tersedia)", 
+                                0.0, 500.0, 50.0)
+
+# ============================
+#  PERHITUNGAN AREA
+# ============================
+
+xmin, xmax = df[col_x].min(), df[col_x].max()
+ymin, ymax = df[col_y].min(), df[col_y].max()
+area = (xmax - xmin) * (ymax - ymin)
+
+# Volume bulk reservoir
+bulk_volume = area * (thickness.mean() if hasattr(thickness, "mean") else thickness)
+
+# Net reservoir volume
+net_volume = bulk_volume * ntg
+
+# Pore volume
+pore_volume = net_volume * phi
+
+# Hydrocarbon pore volume
+hcpv = pore_volume * (1 - sw)
+
+# ============================
+#  DISPLAY HASIL
+# ============================
+
+st.write("### 📊 Hasil Perhitungan")
+
+col_r1, col_r2 = st.columns(2)
+
+col_r1.metric("Area (m²)", f"{area:,.2f}")
+col_r2.metric("Bulk Volume (m³)", f"{bulk_volume:,.2f}")
+
+col_r1.metric("Net Volume (m³)", f"{net_volume:,.2f}")
+col_r2.metric("Pore Volume (m³)", f"{pore_volume:,.2f}")
+
+st.metric("Hydrocarbon Pore Volume (HCPV)", f"{hcpv:,.2f} m³")
+
