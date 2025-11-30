@@ -468,12 +468,13 @@ else:
 
         # --- TABS VISUALISASI (5 TAB) ---
       # --- TABS VISUALISASI (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🗺 Peta Kontur 2D",
     "🧊 Model 3D",
     "📋 Data Mentah",
     "✂ Penampang (Baru)",
-    "🔥 Heatmap Property"
+    "🔥 Heatmap Property",
+    "⭕ Perbandingan 3D (Before After)"
 ])
 
 # pastikan ada minimal info untuk min_z / max_z (dipakai di beberapa tab)
@@ -685,28 +686,105 @@ if len(df) >= 4:
                                data=heat_df.to_csv(index=False),
                                file_name=f"heatmap_{option.replace(' ','')}{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                mime="text/csv")
+            
+      # === TAB 6: PERBANDINGAN 3D BEFORE–AFTER ===
+    with tab6:
+        st.subheader("⭕ Perbandingan 3D Sebelum–Sesudah")
+        st.info("Upload dua dataset untuk melihat perubahan struktur reservoir sebelum dan sesudah.")
 
+        colA, colB = st.columns(2)
+        with colA:
+            file_before = st.file_uploader("Upload Data *Before*", type=["csv"])
+        with colB:
+            file_after = st.file_uploader("Upload Data *After*", type=["csv"])
+
+    # ===== CEK FILE =====
+        if file_before is None or file_after is None:
+            st.warning("Silakan upload kedua file (Before & After) terlebih dahulu.")
+            st.stop()
+
+    # ===== BACA DATA =====
+        df_before = pd.read_csv(file_before)
+        df_after = pd.read_csv(file_after)
+
+        required = {"X", "Y", "Z"}
+        if not required.issubset(df_before.columns) or not required.issubset(df_after.columns):
+            st.error("CSV harus memiliki kolom: X, Y, Z.")
+            st.stop()
+
+    # ===== INTERPOLASI BEFORE =====
+        dfb = df_before.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xb, yb, zb = dfb["X"].values, dfb["Y"].values, dfb["Z"].values
+
+        gx_b, gy_b = np.meshgrid(
+            np.linspace(xb.min(), xb.max(), 100),
+            np.linspace(yb.min(), yb.max(), 100)
+        )
+        gz_b = griddata((xb, yb), zb, (gx_b, gy_b), method="linear")
+
+    # ===== INTERPOLASI AFTER =====
+        dfa = df_after.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xa, ya, za = dfa["X"].values, dfa["Y"].values, dfa["Z"].values
+
+        gx_a, gy_a = np.meshgrid(
+            np.linspace(xa.min(), xa.max(), 100),
+            np.linspace(ya.min(), ya.max(), 100)
+        )
+        gz_a = griddata((xa, ya), za, (gx_a, gy_a), method="linear")
+
+    # ===== PLOT BEFORE & AFTER =====
+        from plotly.subplots import make_subplots
+
+        fig = make_subplots(
+            rows=1, cols=2,
+            specs=[[{"type": "surface"}, {"type": "surface"}]],
+            subplot_titles=("Before", "After")
+        )
+
+        fig.add_trace(go.Surface(x=gx_b, y=gy_b, z=gz_b, colorscale="Viridis"), row=1, col=1)
+        fig.add_trace(go.Surface(x=gx_a, y=gy_a, z=gz_a, colorscale="Turbo"), row=1, col=2)
+
+        fig.update_layout(height=600, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ===== SELISIH =====
+        st.subheader("📉 Selisih Elevasi (After – Before)")
+    try:
+            diff = gz_a - gz_b
+            fig_diff = go.Figure(go.Surface(
+            x=gx_a, y=gy_a, z=diff, colorscale="RdBu"
+            ))
+            fig_diff.update_layout(height=600, title="Perbedaan Elevasi")
+            st.plotly_chart(fig_diff, use_container_width=True)
+    except:
+            st.warning("Grid Before dan After tidak cocok ukurannya.")
+
+  
 # --- jika data TIDAK cukup: tampilkan pesan di masing-masing tab (tab tetap ada) ---
 else:
     # small informative content per tab to avoid NameError / empty with-blocks
-    with tab1:
-        st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
-        st.dataframe(df, use_container_width=True)
+        with tab1:
+            st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
+            st.dataframe(df, use_container_width=True)
 
-    with tab2:
-        st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
+        with tab2:
+            st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
 
-    with tab3:
-        st.subheader("📋 Data Mentah")
-        st.dataframe(df, use_container_width=True)
-        if not df.empty:
-            st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
+        with tab3:
+            st.subheader("📋 Data Mentah")
+            st.dataframe(df, use_container_width=True)
+            if not df.empty:
+                    st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
 
-    with tab4:
-        st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
+        with tab4:
+            st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
 
-    with tab5:
-        st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+        with tab5:
+            st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+
+        with tab6:
+            st.info("Perbandingan 3D Before–After memerlukan dua dataset dengan kolom X,Y,Z.")
+
 
 # === TAB 5: FITUR EKSTENSI ===
 from extra_features import run_extra_features
