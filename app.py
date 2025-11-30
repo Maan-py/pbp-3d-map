@@ -159,6 +159,7 @@ def create_volumetric_report_excel(vol_gas_cap, vol_oil_zone, vol_total_res,
     return buffer
 
 # --- JUDUL UTAMA ---
+st.title("Proyek Pemetaan Bawah Permukaan IF-A")
 st.title("🌍 3D Reservoir Visualization")
 st.markdown("Interactive Structural Map, Fluid Contact & Reserves Calculator")
 
