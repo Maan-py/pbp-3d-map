@@ -252,6 +252,16 @@ with st.sidebar:
                 st.dataframe(df_upload.head(), use_container_width=True)
                 
                 df_upload.columns = [c.upper() for c in df_upload.columns]
+
+                # Fitur: Mengecek kekosongan data & integritas awal
+                if df_upload.empty:
+                    st.error("❌ Eits, file ini kosong !")
+                    st.stop() # Stop program biar gak error di bawah
+                
+                # Cek sekilas apakah data aman
+                if {'X', 'Y', 'Z'}.issubset(df_upload.columns):
+                    st.toast("✅ Data Integrity Check: OK", icon="🛡")
+                    
                 required_cols = {'X', 'Y', 'Z'}
                 
                 if required_cols.issubset(df_upload.columns):
