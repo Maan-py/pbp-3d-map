@@ -405,12 +405,102 @@ else:
         c_res1, c_res2 = st.columns(2)
         c_res1.metric("🔥 GIIP (Gas In Place)", f"{giip/1e9:.2f} BCF", help="Miliar Kaki Kubik")
         c_res2.metric("🛢 STOIIP (Oil In Place)", f"{stoiip/1e6:.2f} MMbbls", help="Juta Barel Minyak")
+# -------------------------------------------------------------------
+#  🔥  STOIIP / GIIP SENSITIVITY CALCULATOR (DIPERBAIKI)
+# -------------------------------------------------------------------
+
+st.markdown("## 📈 STOIIP & GIIP Sensitivity Calculator")
+
+with st.expander("⚙ Pengaturan Sensitivity", expanded=True):
+
+    sweep_param = st.selectbox(
+        "Parameter yang di-sweep:",
+        ["Porosity (ϕ)", "Water Saturation (Sw)", "NTG", "Bo", "Bg"]
+    )
+
+    sweep_min = st.number_input("Nilai Minimum Sweep", value=0.1)
+    sweep_max = st.number_input("Nilai Maksimum Sweep", value=0.4)
+    sweep_step = st.number_input("Step Sweep", value=0.02)
+
+    run_sensitivity = st.button("🚀 Jalankan Sensitivity Analysis")
+
+
+# ------ KODE SENSITIVITY DI LUAR EXPANDER ------
+if run_sensitivity:
+
+    sweep_values = np.arange(sweep_min, sweep_max + sweep_step, sweep_step)
+    results = []
+
+    for v in sweep_values:
+
+        # salin parameter asli
+        s_phi = porosity
+        s_sw  = sw
+        s_ntg = ntg
+        s_bo  = bo
+        s_bg  = bg
+
+        # ganti parameter sesuai sweep
+        if sweep_param == "Porosity (ϕ)":      s_phi = v
+        elif sweep_param == "Water Saturation (Sw)": s_sw = v
+        elif sweep_param == "NTG":             s_ntg = v
+        elif sweep_param == "Bo":              s_bo = v
+        elif sweep_param == "Bg":              s_bg = v
+
+        # hitung ulang STOIIP / GIIP
+        s_stoiip = (vol_oil_zone * s_ntg * s_phi * (1 - s_sw)) / s_bo
+        s_giip   = (vol_gas_cap *  s_ntg * s_phi * (1 - s_sw)) / s_bg
+
+        results.append([v, s_stoiip/1e6, s_giip/1e9])  # MMbbls & BCF
+
+    # ---- BUAT DATAFRAME FINAL ----
+    df_sens = pd.DataFrame(
+        results,
+        columns=["Parameter Value", "STOIIP (MMbbls)", "GIIP (BCF)"]
+    )
+
+    st.markdown("### 📊 Hasil Sensitivity")
+    st.dataframe(df_sens, use_container_width=True)
+
+    # ---- Grafik ----
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_sens["Parameter Value"],
+        y=df_sens["STOIIP (MMbbls)"],
+        mode='lines+markers',
+        name="STOIIP (MMbbls)"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_sens["Parameter Value"],
+        y=df_sens["GIIP (BCF)"],
+        mode='lines+markers',
+        name="GIIP (BCF)"
+    ))
+
+    fig.update_layout(
+        title=f"Sensitivity Result — {sweep_param}",
+        xaxis_title=sweep_param,
+        yaxis_title="Volume",
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ---- Download Sensitivity Result ----
+    csv_sens = df_sens.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="⬇ Download Sensitivity (CSV)",
+        data=csv_sens,
+        file_name="sensitivity_result.csv",
+        mime="text/csv"
+    )
+
 
         # --- EXPORT LAPORAN VOLUMETRIK ---
-        st.markdown("### 📄 Export Laporan Volumetrik")
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
+st.markdown("### 📄 Export Laporan Volumetrik")
+col_exp1, col_exp2, col_exp3 = st.columns(3)
         
-        with col_exp1:
+with col_exp1:
             try:
                 pdf_buffer = create_volumetric_report_pdf(
                     vol_gas_cap, vol_oil_zone, vol_total_res,
@@ -429,42 +519,42 @@ else:
             except Exception as e:
                 st.error(f"Error membuat PDF: {e}")
         
-        with col_exp2:
-            try:
-                excel_buffer = create_volumetric_report_excel(
-                    vol_gas_cap, vol_oil_zone, vol_total_res,
-                    goc_input, woc_input,
-                    len(df),
-                    (df['X'].min(), df['X'].max()),
-                    (df['Y'].min(), df['Y'].max()),
-                    (df['Z'].min(), df['Z'].max()),
-                    df
-                )
-                st.download_button(
-                    label="📊 Download Excel Report",
-                    data=excel_buffer,
-                    file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            except Exception as e:
-                st.error(f"Error membuat Excel: {e}")
+with col_exp2:
+    try:
+        excel_buffer = create_volumetric_report_excel(
+            vol_gas_cap, vol_oil_zone, vol_total_res,
+            goc_input, woc_input,
+            len(df),
+            (df['X'].min(), df['X'].max()),
+            (df['Y'].min(), df['Y'].max()),
+            (df['Z'].min(), df['Z'].max()),
+            df
+            )
+        st.download_button(
+            label="📊 Download Excel Report",
+            data=excel_buffer,
+            file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except Exception as e:
+        st.error(f"Error membuat Excel: {e}")
         
-        with col_exp3:
-            try:
-                grid_df = pd.DataFrame({
-                    'X': grid_x.flatten(),
-                    'Y': grid_y.flatten(),
-                    'Z': grid_z.flatten()
-                })
-                grid_csv = grid_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Grid Data (CSV)",
-                    data=grid_csv,
-                    file_name=f"grid_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-            except Exception as e:
-                st.error(f"Error membuat CSV: {e}")
+with col_exp3:
+    try:
+        grid_df = pd.DataFrame({
+            'X': grid_x.flatten(),
+            'Y': grid_y.flatten(),
+            'Z': grid_z.flatten()
+            })
+        grid_csv = grid_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Grid Data (CSV)",
+            data=grid_csv,
+            file_name=f"grid_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+            )
+    except Exception as e:
+            st.error(f"Error membuat CSV: {e}")
 
         # --- TABS VISUALISASI (5 TAB) ---
       # --- TABS VISUALISASI (5 TAB) ---
