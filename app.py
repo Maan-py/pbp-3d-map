@@ -405,6 +405,67 @@ else:
         c_res1, c_res2 = st.columns(2)
         c_res1.metric("🔥 GIIP (Gas In Place)", f"{giip/1e9:.2f} BCF", help="Miliar Kaki Kubik")
         c_res2.metric("🛢 STOIIP (Oil In Place)", f"{stoiip/1e6:.2f} MMbbls", help="Juta Barel Minyak")
+        # ===============================================
+        #  🤖 NEW FEATURE: SMART ASSISTANT INTEGRATION
+        # ===============================================
+        st.markdown("---")
+        st.subheader("🤖 Smart Assistant: Interpretasi Otomatis")
+        
+        with st.container(border=True):
+            col_assist1, col_assist2 = st.columns([1, 2])
+            
+            # Kolom Kiri: Analisis Kedalaman Sederhana
+            with col_assist1:
+                st.write("#### 📝 Ringkasan Lapangan")
+                avg_depth = df['Z'].mean()
+                
+                # Logic: Kategori Kedalaman
+                if avg_depth < 1000:
+                    depth_status = "Dangkal (Shallow)"
+                    depth_icon = "☀️"
+                    depth_desc = "Biaya pengeboran relatif murah."
+                elif avg_depth < 2500:
+                    depth_status = "Menengah (Medium)"
+                    depth_icon = "🌊"
+                    depth_desc = "Operasional standar."
+                else:
+                    depth_status = "Dalam (Deep)"
+                    depth_icon = "⚓"
+                    depth_desc = "Memerlukan rig spesifikasi tinggi."
+                
+                st.metric(label="Rata-rata Kedalaman", value=f"{avg_depth:.0f} m", delta=depth_status, delta_color="off")
+                st.info(f"{depth_icon} {depth_desc}")
+
+            # Kolom Kanan: Analisis Detail (Logic If-Else)
+            with col_assist2:
+                st.write("#### 🧠 Analisis Reservoir")
+                analysis_points = []
+                
+                # Logic 1: Kualitas Batuan (Porositas)
+                if porosity >= 0.25:
+                    analysis_points.append(f"✅ **Kualitas Batuan Sangat Baik** (Porositas {porosity*100:.0f}%): Batuan memiliki ruang pori yang besar, minyak mudah tersimpan.")
+                elif porosity >= 0.15:
+                    analysis_points.append(f"⚖️ **Kualitas Batuan Cukup Baik** (Porositas {porosity*100:.0f}%): Kualitas reservoir standar industri.")
+                else:
+                    analysis_points.append(f"⚠️ **Kualitas Batuan Rendah** (Porositas {porosity*100:.0f}%): Batuan 'tight', mungkin membutuhkan stimulasi (fracking).")
+
+                # Logic 2: Skala Cadangan (STOIIP)
+                stoiip_mmbbls = stoiip / 1e6
+                if stoiip_mmbbls > 50:
+                    analysis_points.append(f"🌟 **Potensi Besar (Giant Field)**: Cadangan {stoiip_mmbbls:.1f} MMbbls sangat ekonomis dan strategis.")
+                elif stoiip_mmbbls > 5:
+                    analysis_points.append(f"💰 **Potensi Komersial**: Cadangan {stoiip_mmbbls:.1f} MMbbls layak dikembangkan secara ekonomi.")
+                else:
+                    analysis_points.append(f"📉 **Potensi Marginal**: Cadangan {stoiip_mmbbls:.1f} MMbbls tergolong kecil, perlu perhitungan biaya yang ketat.")
+                
+                # Logic 3: Fluid Contact Warning
+                if (woc_input - goc_input) > 0 and (woc_input - goc_input) < 10:
+                    analysis_points.append("🚨 **Warning Zona Minyak**: Zona minyak sangat tipis (< 10m). Hati-hati terhadap 'coning' air atau gas saat produksi.")
+                
+                # Render Bullet Points
+                for point in analysis_points:
+                    st.markdown(point)
+        # ===============================================
 
         # --- EXPORT LAPORAN VOLUMETRIK ---
         st.markdown("### 📄 Export Laporan Volumetrik")
