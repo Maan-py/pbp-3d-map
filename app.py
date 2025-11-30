@@ -659,25 +659,85 @@ if len(df) >= 4:
             st.info("Export PNG 2D tidak tersedia (butuh orca/kaleido terpasang).")
 
     # === TAB 2: 3D ===
+    # === TAB 2: 3D ===
     with tab2:
+        st.subheader("🧊 Model 3D Reservoir & Sumur")
+        
+        # 1. Inisialisasi Figure
         fig_3d = go.Figure()
-        fig_3d.add_trace(go.Surface(z=grid_z, x=grid_x, y=grid_y, colorscale='Earth_r', opacity=0.9, name='Structure'))
 
+        # 2. Plot Permukaan Struktur (Surface)
+        fig_3d.add_trace(go.Surface(
+            z=grid_z, 
+            x=grid_x, 
+            y=grid_y, 
+            colorscale='Earth_r', 
+            opacity=0.9, 
+            name='Structure'
+        ))
+
+        # 3. Fungsi Helper untuk Bidang Kontak Fluida
         def create_plane(z_lvl, color, name):
-            return go.Surface(z=z_lvl * np.ones_like(grid_z), x=grid_x, y=grid_y,
-                              colorscale=[[0, color], [1, color]], opacity=0.4, showscale=False, name=name)
+            return go.Surface(
+                z=z_lvl * np.ones_like(grid_z), 
+                x=grid_x, 
+                y=grid_y,
+                colorscale=[[0, color], [1, color]], 
+                opacity=0.4, 
+                showscale=False, 
+                name=name
+            )
 
+        # 4. Plot GOC dan WOC
         fig_3d.add_trace(create_plane(goc_input, 'red', 'GOC'))
         fig_3d.add_trace(create_plane(woc_input, 'blue', 'WOC'))
 
-        for _, row in df.iterrows():
-            fig_3d.add_trace(go.Scatter3d(
-                x=[row['X'], row['X']], y=[row['Y'], row['Y']], z=[min_z, row['Z']],
-                mode='lines+markers', marker=dict(size=3, color='black'), line=dict(color='black', width=4), showlegend=False
-            ))
+        # 5. --- FITUR BARU: VISUALISASI SUMUR (WELLS) ---
+        # Menambahkan checkbox interaktif
+        st.markdown("##### 🛤 Kontrol Visualisasi")
+        show_wells = st.checkbox("Tampilkan Jalur Sumur (Wells)", value=True)
+        
+        if show_wells:
+            # Loop setiap titik data untuk membuat garis sumur
+            for index, row in df.iterrows():
+                # Menentukan titik atas sumur. 
+                # Kita pakai min_z (titik teratas struktur) agar skala visualnya pas.
+                well_top = min_z 
+                
+                # Gambar Garis Sumur (Pipa)
+                fig_3d.add_trace(go.Scatter3d(
+                    x=[row['X'], row['X']], 
+                    y=[row['Y'], row['Y']], 
+                    z=[well_top, row['Z']], # Dari atas struktur ke titik target
+                    mode='lines',
+                    line=dict(color='grey', width=3), # Warna abu-abu pipa
+                    name=f'Well-{index+1}',
+                    showlegend=False,
+                    hoverinfo='text',
+                    text=f"Well-{index+1}<br>X: {row['X']}<br>Y: {row['Y']}<br>Depth: {row['Z']}m"
+                ))
+                
+                # Gambar Marker (Titik Target) di ujung bawah
+                fig_3d.add_trace(go.Scatter3d(
+                    x=[row['X']], y=[row['Y']], z=[row['Z']],
+                    mode='markers',
+                    marker=dict(size=5, color='black', symbol='diamond'), # Ikon diamond biar keren
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+        # -----------------------------------------------
 
-        fig_3d.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Depth', zaxis=dict(autorange="reversed")),
-                             height=650, margin=dict(l=0, r=0, b=0, t=0))
+        # 6. Layout & Render
+        fig_3d.update_layout(
+            scene=dict(
+                xaxis_title='X (East)', 
+                yaxis_title='Y (North)', 
+                zaxis_title='Depth (TVD)', 
+                zaxis=dict(autorange="reversed") # Membalik sumbu Z agar kedalaman ke bawah
+            ),
+            height=650, 
+            margin=dict(l=0, r=0, b=0, t=0)
+        )
         st.plotly_chart(fig_3d, use_container_width=True)
 
     # === TAB 3: DATA MENTAH ===
