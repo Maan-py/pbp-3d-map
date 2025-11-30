@@ -11,8 +11,8 @@
 -   [Rheza Priya Anargya - 123230032]
 -   [Gusti Rama - 123230040]
 -   [Bintoro - 123230059]
--   [Imam Khusain - 123230018 ]
--   [Adi Setya N.P - 123230026 ]
+-   [Imam Khusain - 123230018]
+-   [Adi Setya N.P - 123230026]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
@@ -83,4 +83,3 @@ Yang mau ikut kontribusi silakan ikuti langkah-langkah berikut:
 3.  **Lakukan perubahan** (commit perubahan Anda: `git commit -m 'Menambahkan fitur baru'`).
 4.  **Push ke branch** (`git push origin fitur-baru`).
 5.  **Buat Pull Request**.
-
