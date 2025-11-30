@@ -17,6 +17,7 @@
 -   [Nisrina Salsabila - 123230004]
 -   [Muhammad Daffa - 123230203]
 -   [Muhammad Diyan Alkautsar - 123230019]
+-   [Adinda - 123230103]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
