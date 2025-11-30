@@ -1,3 +1,8 @@
+# ============================
+# app.py — Part 1 (imports, helpers, sidebar, upload)
+# Versi: final-ready (siap disambung part 2 & 3)
+# ============================
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,7 +12,7 @@ from datetime import datetime
 import io
 import json
 import tempfile
-from interpolasi import generate_property_heatmap
+from interpolasi import generate_property_heatmap  # tetap dipakai jika ada implementasi di interpolasi.py
 
 # ReportLab untuk PDF ringkasan volumetrik
 from reportlab.lib.pagesizes import A4
@@ -18,7 +23,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Projek Pemetaan Bawah Permukaan IF-A", layout="wide", page_icon="🌍")
+st.set_page_config(page_title="Proyek Pemetaan Bawah Permukaan IF-A", layout="wide", page_icon="🌍")
 
 # CSS Custom untuk sedikit mempercantik tampilan
 st.markdown("""
@@ -34,8 +39,8 @@ st.markdown("""
 # FUNGSI HELPER UNTUK EXPORT LAPORAN VOLUMETRIK
 # -------------------------------------------------------------------
 def create_volumetric_report_pdf(vol_gas_cap, vol_oil_zone, vol_total_res,
-                                 goc_input, woc_input,
-                                 num_points, x_range, y_range, z_range):
+                                goc_input, woc_input,
+                                num_points, x_range, y_range, z_range):
     """Membuat laporan volumetrik dalam format PDF (ringkasan)"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -405,87 +410,35 @@ else:
         c_res1, c_res2 = st.columns(2)
         c_res1.metric("🔥 GIIP (Gas In Place)", f"{giip/1e9:.2f} BCF", help="Miliar Kaki Kubik")
         c_res2.metric("🛢 STOIIP (Oil In Place)", f"{stoiip/1e6:.2f} MMbbls", help="Juta Barel Minyak")
+# ==================================================
+# =========== TABS VISUALISASI UTAMA ===============
+# ==================================================
 
-        # --- EXPORT LAPORAN VOLUMETRIK ---
-        st.markdown("### 📄 Export Laporan Volumetrik")
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
-        
-        with col_exp1:
-            try:
-                pdf_buffer = create_volumetric_report_pdf(
-                    vol_gas_cap, vol_oil_zone, vol_total_res,
-                    goc_input, woc_input,
-                    len(df),
-                    (df['X'].min(), df['X'].max()),
-                    (df['Y'].min(), df['Y'].max()),
-                    (df['Z'].min(), df['Z'].max())
-                )
-                st.download_button(
-                    label="📄 Download PDF Report",
-                    data=pdf_buffer,
-                    file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                    mime="application/pdf"
-                )
-            except Exception as e:
-                st.error(f"Error membuat PDF: {e}")
-        
-        with col_exp2:
-            try:
-                excel_buffer = create_volumetric_report_excel(
-                    vol_gas_cap, vol_oil_zone, vol_total_res,
-                    goc_input, woc_input,
-                    len(df),
-                    (df['X'].min(), df['X'].max()),
-                    (df['Y'].min(), df['Y'].max()),
-                    (df['Z'].min(), df['Z'].max()),
-                    df
-                )
-                st.download_button(
-                    label="📊 Download Excel Report",
-                    data=excel_buffer,
-                    file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            except Exception as e:
-                st.error(f"Error membuat Excel: {e}")
-        
-        with col_exp3:
-            try:
-                grid_df = pd.DataFrame({
-                    'X': grid_x.flatten(),
-                    'Y': grid_y.flatten(),
-                    'Z': grid_z.flatten()
-                })
-                grid_csv = grid_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Grid Data (CSV)",
-                    data=grid_csv,
-                    file_name=f"grid_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-            except Exception as e:
-                st.error(f"Error membuat CSV: {e}")
-
-        # --- TABS VISUALISASI (5 TAB) ---
-      # --- TABS VISUALISASI (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# Buat tab lengkap termasuk tab Isopach yang baru
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🗺 Peta Kontur 2D",
     "🧊 Model 3D",
     "📋 Data Mentah",
-    "✂ Penampang (Baru)",
-    "🔥 Heatmap Property"
+    "✂ Penampang",
+    "🔥 Heatmap Property",
+    "⭕ Before–After",
+    "🟧 Isopach Map"  # <--- TAB BARU
 ])
 
-# pastikan ada minimal info untuk min_z / max_z (dipakai di beberapa tab)
+# pastikan ada minimal info untuk min/max Z
 if not df.empty:
     min_z, max_z = df['Z'].min(), df['Z'].max()
 else:
     min_z, max_z = 0.0, 0.0
 
-# --- jika data cukup, jalankan perhitungan dan isi semua tab ---
+# ==================================================
+# ========= IF DATA >= 4 (semua fitur ON) ==========
+# ==================================================
 if len(df) >= 4:
-    # grid & interpolasi (siapkan aman dengan try/except)
-    df_unique = df.groupby(['X', 'Y'], as_index=False)['Z'].mean()
+
+    # -------- GRID INTERPOLASI DASAR --------
+    df_unique = df.groupby(['X','Y'], as_index=False)['Z'].mean()
+
     grid_x = np.linspace(df['X'].min(), df['X'].max(), 100)
     grid_y = np.linspace(df['Y'].min(), df['Y'].max(), 100)
     grid_x, grid_y = np.meshgrid(grid_x, grid_y)
@@ -497,7 +450,7 @@ if len(df) >= 4:
             (grid_x, grid_y),
             method='cubic'
         )
-    except Exception:
+    except:
         grid_z = griddata(
             (df_unique['X'], df_unique['Y']),
             df_unique['Z'],
@@ -505,212 +458,414 @@ if len(df) >= 4:
             method='linear'
         )
 
-    # -- PERHITUNGAN VOLUME & CADANGAN (tetap di sini, karena cuma kalau data cukup) --
-    x_min, x_max = df['X'].min(), df['X'].max()
-    y_min, y_max = df['Y'].min(), df['Y'].max()
-    nx, ny = 100, 100
-    dx = (x_max - x_min) / (nx - 1) if nx > 1 else 1.0
-    dy = (y_max - y_min) / (ny - 1) if ny > 1 else 1.0
-    cell_area = dx * dy
-
-    thick_above_woc = woc_input - grid_z
-    thick_above_woc[thick_above_woc < 0] = 0
-    vol_total_res = np.nansum(thick_above_woc) * cell_area
-
-    thick_above_goc = goc_input - grid_z
-    thick_above_goc[thick_above_goc < 0] = 0
-    vol_gas_cap = np.nansum(thick_above_goc) * cell_area
-
-    vol_oil_zone = max(0, vol_total_res - vol_gas_cap)
-
-    stoiip = (vol_oil_zone * ntg * porosity * (1 - sw)) / bo
-    giip = (vol_gas_cap * ntg * porosity * (1 - sw)) / bg
-
-    # Metrics (bisa di atas tab atau di salah satu tab — saya tampilkan di atas tab1 untuk ringkasan)
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("🔴 Gross Gas Volume", f"{vol_gas_cap/1e6:.2f} Juta m³")
-    col_b.metric("🟢 Gross Oil Volume", f"{vol_oil_zone/1e6:.2f} Juta m³")
-    col_c.metric("🔵 Total Reservoir", f"{vol_total_res/1e6:.2f} Juta m³")
-
-    # === TAB 1: 2D ===
+    # ==================================================
+    # ==================== TAB 1 =======================
+    # ==================================================
     with tab1:
         fig_2d = go.Figure()
         fig_2d.add_trace(go.Contour(
             z=grid_z,
-            x=np.linspace(x_min, x_max, grid_z.shape[1]),
-            y=np.linspace(y_min, y_max, grid_z.shape[0]),
+            x=np.linspace(df['X'].min(), df['X'].max(), grid_z.shape[1]),
+            y=np.linspace(df['Y'].min(), df['Y'].max(), grid_z.shape[0]),
             colorscale='Greys',
-            opacity=0.4,
+            opacity=0.45,
             contours=dict(
                 start=min_z,
                 end=max_z,
-                size=(max_z - min_z) / 10 if max_z != min_z else 1,
+                size=(max_z-min_z)/10 if max_z != min_z else 1,
                 showlabels=True
             ),
-            name='Structure'
+            name='Surface'
         ))
 
-        # point overlay colored by fluid
-        conditions = [
-            (df['Z'] < goc_input),
-            (df['Z'] >= goc_input) & (df['Z'] <= woc_input),
-            (df['Z'] > woc_input)
-        ]
-        choices = ['Gas Cap', 'Oil Zone', 'Aquifer']
-        colors_map = {'Gas Cap': 'red', 'Oil Zone': 'green', 'Aquifer': 'blue'}
-        df['Fluid'] = np.select(conditions, choices, default='Unknown')
+        # titik-titik
+        df['Fluid'] = np.where(df['Z'] < goc_input, 'Gas Cap',
+                        np.where(df['Z'] <= woc_input, 'Oil Zone', 'Aquifer'))
+        colors_map = {'Gas Cap':'red','Oil Zone':'green','Aquifer':'blue'}
 
-        for fluid in choices:
-            subset = df[df['Fluid'] == fluid]
-            if not subset.empty:
+        for fluid in ['Gas Cap','Oil Zone','Aquifer']:
+            sub = df[df['Fluid']==fluid]
+            if len(sub)>0:
                 fig_2d.add_trace(go.Scatter(
-                    x=subset['X'],
-                    y=subset['Y'],
+                    x=sub['X'], y=sub['Y'],
                     mode='markers+text',
-                    text=subset['Z'].astype(int),
+                    text=sub['Z'].astype(int),
                     textposition="top center",
-                    marker=dict(size=10, color=colors_map[fluid], line=dict(width=1, color='black')),
+                    marker=dict(size=10, color=colors_map[fluid], line=dict(color='black',width=1)),
                     name=fluid
                 ))
 
-        fig_2d.update_layout(height=650, margin=dict(l=20, r=20, t=40, b=20),
-                             xaxis_title="X Coordinate", yaxis_title="Y Coordinate")
+        fig_2d.update_layout(
+            height=650,
+            margin=dict(l=20,r=20,t=40,b=20),
+            xaxis_title="X",
+            yaxis_title="Y"
+        )
         st.plotly_chart(fig_2d, use_container_width=True)
 
-        # Export
-        try:
-            img_2d_png = fig_2d.to_image(format="png", width=1200, height=800)
-            st.download_button("🖼 Download PNG", data=img_2d_png,
-                               file_name=f"contour_2d_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                               mime="image/png")
-        except Exception:
-            st.info("Export PNG 2D tidak tersedia (butuh orca/kaleido terpasang).")
-
-    # === TAB 2: 3D ===
+    # ==================================================
+    # ==================== TAB 2 =======================
+    # ==================================================
     with tab2:
         fig_3d = go.Figure()
-        fig_3d.add_trace(go.Surface(z=grid_z, x=grid_x, y=grid_y, colorscale='Earth_r', opacity=0.9, name='Structure'))
 
-        def create_plane(z_lvl, color, name):
-            return go.Surface(z=z_lvl * np.ones_like(grid_z), x=grid_x, y=grid_y,
-                              colorscale=[[0, color], [1, color]], opacity=0.4, showscale=False, name=name)
+        fig_3d.add_trace(go.Surface(
+            x=grid_x, y=grid_y, z=grid_z,
+            colorscale="Earth_r", opacity=0.9, name="Structure"
+        ))
 
-        fig_3d.add_trace(create_plane(goc_input, 'red', 'GOC'))
-        fig_3d.add_trace(create_plane(woc_input, 'blue', 'WOC'))
+        def plane(level,color,name):
+            return go.Surface(
+                x=grid_x, y=grid_y,
+                z=np.ones_like(grid_z)*level,
+                opacity=0.4,
+                colorscale=[[0,color],[1,color]],
+                showscale=False,
+                name=name
+            )
 
-        for _, row in df.iterrows():
-            fig_3d.add_trace(go.Scatter3d(
-                x=[row['X'], row['X']], y=[row['Y'], row['Y']], z=[min_z, row['Z']],
-                mode='lines+markers', marker=dict(size=3, color='black'), line=dict(color='black', width=4), showlegend=False
-            ))
+        fig_3d.add_trace(plane(goc_input,'red',"GOC"))
+        fig_3d.add_trace(plane(woc_input,'blue',"WOC"))
 
-        fig_3d.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Depth', zaxis=dict(autorange="reversed")),
-                             height=650, margin=dict(l=0, r=0, b=0, t=0))
+        fig_3d.update_layout(
+            scene=dict(
+                zaxis=dict(autorange="reversed"),
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Depth"
+            ),
+            height=650
+        )
         st.plotly_chart(fig_3d, use_container_width=True)
 
-    # === TAB 3: DATA MENTAH ===
+    # ==================================================
+    # ==================== TAB 3 =======================
+    # ==================================================
     with tab3:
         st.dataframe(df, use_container_width=True)
-        csv_data = df.to_csv(index=False)
-        st.download_button("📥 Download CSV", data=csv_data,
-                           file_name=f"raw_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                           mime="text/csv")
+        st.download_button(
+            "⬇ Download CSV Data",
+            df.to_csv(index=False),
+            file_name="raw_data.csv",
+            mime="text/csv"
+        )
 
-    # === TAB 4: CROSS SECTION ===
+    # ==================================================
+    # ==================== TAB 4 =======================
+    # ==================================================
     with tab4:
-        st.markdown("##### ✂ Penampang Melintang (Cross-Section)")
-        st.caption("Geser slider untuk memotong peta dari Barat ke Timur pada posisi Y tertentu.")
-        slice_y = st.slider("Pilih Posisi Irisan Y", float(y_min), float(y_max), float((y_min + y_max) / 2))
-        idx_y = (np.abs(grid_y[:, 0] - slice_y)).argmin()
-        z_profile = grid_z[idx_y, :]
+        st.markdown("### ✂ Cross Section (Penampang)")
+
+        slice_y = st.slider(
+            "Pilih posisi Y",
+            float(df['Y'].min()),
+            float(df['Y'].max()),
+            float((df['Y'].min()+df['Y'].max())/2)
+        )
+
+        idx = (np.abs(grid_y[:,0] - slice_y)).argmin()
+        z_profile = grid_z[idx,:]
+
         fig_xs = go.Figure()
-        fig_xs.add_trace(go.Scatter(x=grid_x[0, :], y=z_profile, mode='lines', fill='tozeroy', name='Top Structure'))
+        fig_xs.add_trace(go.Scatter(
+            x=grid_x[0,:],
+            y=z_profile,
+            mode="lines",
+            fill="tozeroy"
+        ))
         fig_xs.add_hline(y=goc_input, line_dash="dash", line_color="red", annotation_text="GOC")
         fig_xs.add_hline(y=woc_input, line_dash="dash", line_color="blue", annotation_text="WOC")
-        fig_xs.update_yaxes(autorange="reversed", title="Depth (m)")
-        fig_xs.update_layout(title=f"Irisan pada Y = {slice_y:.1f}", xaxis_title="X Coordinate", height=500)
+
+        fig_xs.update_yaxes(autorange="reversed", title="Depth")
+        fig_xs.update_xaxes(title="X")
+        fig_xs.update_layout(height=500, title=f"Cross-section @ Y = {slice_y}")
         st.plotly_chart(fig_xs, use_container_width=True)
 
-    # === TAB 5: HEATMAP PROPERTY ===
+    # ==================================================
+    # ==================== TAB 5 =======================
+    # ==================================================
     with tab5:
-        st.subheader("🔥 Heatmap Interpolasi Properti")
-        st.markdown("Pilih properti yang ingin di-interpolasi (Porosity/Sw/NTG atau custom upload).")
+        st.subheader("🔥 Heatmap Interpolasi Property")
 
-        # use petrophys params per-point (scalar sliders) -> expand to grid by repeating per-point
         df_prop = df.copy()
-        # kalau porosity/sw/ntg adalah scalar (slider), buat kolom constant per titik
         df_prop["Porosity"] = porosity
         df_prop["Sw"] = sw
         df_prop["NTG"] = ntg
 
-        option = st.selectbox("Sumber properti:", ["Porosity", "Sw", "NTG", "Depth (Z)", "Upload CSV (kolom VALUE)"])
-        if option == "Upload CSV (kolom VALUE)":
-            up = st.file_uploader("Upload CSV dengan kolom VALUE", type=["csv"])
-            if up is not None:
-                prop_df = pd.read_csv(up)
-                if "VALUE" in prop_df.columns and len(prop_df) == len(df):
+        option = st.selectbox(
+            "Pilih Properti",
+            ["Porosity","Sw","NTG","Depth (Z)","Upload CSV VALUE"]
+        )
+
+        if option == "Upload CSV VALUE":
+            uploaded = st.file_uploader("Upload Properti (kolom VALUE)", type="csv")
+            if uploaded:
+                prop_df = pd.read_csv(uploaded)
+                if "VALUE" in prop_df.columns and len(prop_df)==len(df):
                     prop_values = prop_df["VALUE"].values
                 else:
-                    st.error("CSV harus memiliki kolom VALUE dan jumlah baris sama dengan titik.")
+                    st.error("Format salah! CSV harus punya kolom VALUE & jumlah baris harus sama.")
                     prop_values = None
             else:
                 prop_values = None
         else:
-            if option == "Depth (Z)":
-                prop_values = df_prop["Z"].values
-            else:
-                prop_values = df_prop[option].values
+            prop_values = df["Z"].values if option=="Depth (Z)" else df_prop[option].values
 
-        if prop_values is None:
-            st.info("Belum ada property yang valid untuk di-interpolasi.")
-        else:
+        if prop_values is not None:
             try:
-                grid_prop = griddata((df["X"], df["Y"]), prop_values, (grid_x, grid_y), method='cubic')
-            except Exception:
-                grid_prop = griddata((df["X"], df["Y"]), prop_values, (grid_x, grid_y), method='linear')
+                grid_prop = griddata((df["X"],df["Y"]), prop_values, (grid_x,grid_y), method="cubic")
+            except:
+                grid_prop = griddata((df["X"],df["Y"]), prop_values, (grid_x,grid_y), method="linear")
 
-            fig_heat = go.Figure(data=go.Heatmap(
-                x=np.linspace(x_min, x_max, grid_prop.shape[1]),
-                y=np.linspace(y_min, y_max, grid_prop.shape[0]),
+            fig_heat = go.Figure(go.Heatmap(
+                x=np.linspace(df['X'].min(),df['X'].max(),grid_prop.shape[1]),
+                y=np.linspace(df['Y'].min(),df['Y'].max(),grid_prop.shape[0]),
                 z=grid_prop,
-                colorscale="Viridis",
-                colorbar=dict(title=f"{option}")
+                colorscale="Viridis"
             ))
-            fig_heat.update_layout(height=650, xaxis_title="X", yaxis_title="Y", title=f"Heatmap {option} (Interpolated)")
+            fig_heat.update_layout(
+                height=650,
+                title=f"Heatmap {option}"
+            )
             st.plotly_chart(fig_heat, use_container_width=True)
 
-            # export
-            heat_df = pd.DataFrame({'X': grid_x.flatten(), 'Y': grid_y.flatten(), option: grid_prop.flatten()})
-            st.download_button(label=f"⬇ Download {option} Heatmap CSV",
-                               data=heat_df.to_csv(index=False),
-                               file_name=f"heatmap_{option.replace(' ','')}{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                               mime="text/csv")
+            # download CSV
+            heat_df = pd.DataFrame({
+                "X":grid_x.flatten(),
+                "Y":grid_y.flatten(),
+                option: grid_prop.flatten()
+            })
+            st.download_button(
+                f"⬇ Download Heatmap {option}",
+                heat_df.to_csv(index=False),
+                file_name=f"heatmap_{option}.csv",
+                mime="text/csv"
+            )
 
-# --- jika data TIDAK cukup: tampilkan pesan di masing-masing tab (tab tetap ada) ---
+    # ==================================================
+    # ==================== TAB 6 =======================
+    # ==================================================
+    with tab6:
+        st.subheader("⭕ Perbandingan 3D Before – After")
+
+        colA, colB = st.columns(2)
+        with colA:
+            before_file = st.file_uploader("Upload BEFORE", type="csv")
+        with colB:
+            after_file = st.file_uploader("Upload AFTER", type="csv")
+
+        if before_file and after_file:
+            df_b = pd.read_csv(before_file)
+            df_a = pd.read_csv(after_file)
+
+            if not {"X","Y","Z"}.issubset(df_b.columns) or not {"X","Y","Z"}.issubset(df_a.columns):
+                st.error("File harus punya kolom X,Y,Z!")
+                st.stop()
+
+            # interpolasi BEFORE
+            gxb = np.linspace(df_b["X"].min(), df_b["X"].max(), 100)
+            gyb = np.linspace(df_b["Y"].min(), df_b["Y"].max(), 100)
+            gxb,gyb = np.meshgrid(gxb,gyb)
+            try:
+                gzb = griddata((df_b["X"],df_b["Y"]), df_b["Z"], (gxb,gyb), method="linear")
+            except:
+                gzb = None
+
+            # interpolasi AFTER
+            gxa = np.linspace(df_a["X"].min(), df_a["X"].max(), 100)
+            gya = np.linspace(df_a["Y"].min(), df_a["Y"].max(), 100)
+            gxa,gya = np.meshgrid(gxa,gya)
+            try:
+                gza = griddata((df_a["X"],df_a["Y"]), df_a["Z"], (gxa,gya), method="linear")
+            except:
+                gza = None
+
+            # plot
+            from plotly.subplots import make_subplots
+            fig = make_subplots(rows=1, cols=2,
+                specs=[[{"type":"surface"},{"type":"surface"}]],
+                subplot_titles=["Before", "After"]
+            )
+
+            fig.add_trace(go.Surface(x=gxb,y=gyb,z=gzb,colorscale="Viridis"),1,1)
+            fig.add_trace(go.Surface(x=gxa,y=gya,z=gza,colorscale="Turbo"),1,2)
+            fig.update_layout(height=600)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # selisih
+            if gzb is not None and gza is not None and gzb.shape==gza.shape:
+                diff = gza - gzb
+                fig_d = go.Figure(go.Surface(
+                    x=gxa, y=gya, z=diff, colorscale="RdBu"
+                ))
+                fig_d.update_layout(title="Perbedaan Elevasi", height=600)
+                st.plotly_chart(fig_d, use_container_width=True)
+            else:
+                st.warning("Grid before & after tidak cocok ukuran.")
+
+    # ==================================================
+    # ==================== TAB 7 (ISOPACH) =============
+    # ==================================================
+    with tab7:
+        st.subheader("🟧 Isopach Map (Ketebalan Formasi)")
+
+        st.markdown("""
+        **Isopach = Thickness Map**  
+        Mengukur *perbedaan* antara horizon **Top** dan **Base**.
+        """)
+
+        iso_mode = st.radio(
+            "Mode Input:",
+            ["Gunakan Z (Top + Base otomatis)", "Upload Top & Base"]
+        )
+
+        # ===================== CASE 1: PAKAI Z ====================
+        if iso_mode == "Gunakan Z (Top + Base otomatis)":
+            st.info("Top = nilai Z terendah pada tiap XY, Base = nilai Z tertinggi.")
+
+            df_tb = df.copy()
+            df_top = df_tb.groupby(["X","Y"])["Z"].min().reset_index()
+            df_base = df_tb.groupby(["X","Y"])["Z"].max().reset_index()
+
+            df_iso = df_top.copy()
+            df_iso["Base"] = df_base["Z"]
+            df_iso["Thickness"] = df_iso["Base"] - df_iso["Z"]
+
+        # ===================== CASE 2: UPLOAD ====================
+        else:
+            top_file = st.file_uploader("Upload Top (kolom: X,Y,Z)", type="csv")
+            base_file = st.file_uploader("Upload Base (kolom: X,Y,Z)", type="csv")
+
+            if top_file and base_file:
+                df_top = pd.read_csv(top_file)
+                df_base = pd.read_csv(base_file)
+
+                if not {"X","Y","Z"}.issubset(df_top.columns) or not {"X","Y","Z"}.issubset(df_base.columns):
+                    st.error("Format harus punya X,Y,Z!")
+                    st.stop()
+
+                df_iso = df_top.copy()
+                df_iso["Base"] = df_base["Z"]
+                df_iso["Thickness"] = df_iso["Base"] - df_iso["Z"]
+            else:
+                st.info("Menunggu file upload...")
+                st.stop()
+
+        # -------- INTERPOLASI THICKNESS --------
+        try:
+            grid_thick = griddata(
+                (df_iso["X"],df_iso["Y"]),
+                df_iso["Thickness"],
+                (grid_x,grid_y),
+                method="cubic"
+            )
+        except:
+            grid_thick = griddata(
+                (df_iso["X"],df_iso["Y"]),
+                df_iso["Thickness"],
+                (grid_x,grid_y),
+                method="linear"
+            )
+
+        # -------------- PLOT ---------------------
+        fig_iso = go.Figure(go.Contour(
+            x=np.linspace(df['X'].min(), df['X'].max(), 100),
+            y=np.linspace(df['Y'].min(), df['Y'].max(), 100),
+            z=grid_thick,
+            colorscale="Oranges",
+            contours=dict(showlabels=True),
+            colorbar=dict(title="Thickness (m)")
+        ))
+        fig_iso.update_layout(height=650, title="Isopach Map")
+        st.plotly_chart(fig_iso, use_container_width=True)
+
+        # download CSV
+        iso_df = pd.DataFrame({
+            "X":grid_x.flatten(),
+            "Y":grid_y.flatten(),
+            "Thickness":grid_thick.flatten()
+        })
+        st.download_button(
+            "⬇ Download Isopach CSV",
+            iso_df.to_csv(index=False),
+            file_name=f"isopach_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+
+# ==================================================
+# ========== IF DATA < 4, TAB WARNING MODE =========
+# ==================================================
 else:
-    # small informative content per tab to avoid NameError / empty with-blocks
-    with tab1:
-        st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
-        st.dataframe(df, use_container_width=True)
+    for t in [tab1,tab2,tab3,tab4,tab5,tab6,tab7]:
+        with t:
+            st.warning("Minimal 4 titik diperlukan untuk fitur ini.")
+            st.dataframe(df, use_container_width=True)
+# ============================================================
+#           PERHITUNGAN VOLUME RESERVOIR (RINGKAS)
+# ============================================================
 
-    with tab2:
-        st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
+st.subheader("📦 Perhitungan Volume Reservoir (Simplified)")
 
-    with tab3:
-        st.subheader("📋 Data Mentah")
-        st.dataframe(df, use_container_width=True)
-        if not df.empty:
-            st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
+col_v1, col_v2, col_v3 = st.columns(3)
 
-    with tab4:
-        st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
+phi = col_v1.number_input("Porosity (ϕ)", 0.00, 1.00, 0.20)
+sw  = col_v2.number_input("Water Saturation (Sw)", 0.00, 1.00, 0.30)
+ntg = col_v3.number_input("Net-to-Gross (NTG)", 0.00, 1.00, 0.80)
 
-    with tab5:
-        st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+# -----------------------------
+# AUTO-DETECT Kolom X,Y,Z
+# -----------------------------
+possible_x = ["X","x","Easting","Longitude","Long"]
+possible_y = ["Y","y","Northing","Latitude","Lat"]
+possible_z = ["Z","z","Depth","TVD","Elevation"]
 
-# === TAB 5: FITUR EKSTENSI ===
-from extra_features import run_extra_features
+col_x = next((c for c in possible_x if c in df.columns), None)
+col_y = next((c for c in possible_y if c in df.columns), None)
+col_z = next((c for c in possible_z if c in df.columns), None)
 
-tab_extra = st.tabs(["🧩 Fitur Ekstensi"])[0]
-with tab_extra:
-    run_extra_features(df)
+if col_x is None or col_y is None:
+    st.error("❌ Tidak dapat menemukan kolom X/Y pada data!")
+    st.stop()
+
+# -----------------------------
+# Ketebalan
+# -----------------------------
+if col_z:
+    thickness = df[col_z]   # pakai Z langsung
+else:
+    thickness = st.number_input("Masukkan Thickness", 0.0, 500.0, 50.0)
+
+# -----------------------------
+# HITUNG AREA
+# -----------------------------
+xmin, xmax = df[col_x].min(), df[col_x].max()
+ymin, ymax = df[col_y].min(), df[col_y].max()
+
+area = (xmax - xmin) * (ymax - ymin)
+
+# -----------------------------
+# VOLUME
+# -----------------------------
+bulk_volume  = area * (thickness.mean() if hasattr(thickness,"mean") else thickness)
+net_volume   = bulk_volume * ntg
+pore_volume  = net_volume  * phi
+hcpv         = pore_volume * (1 - sw)
+
+# -----------------------------
+# TAMPILKAN
+# -----------------------------
+st.write("### 📊 Hasil Perhitungan")
+
+col_r1, col_r2 = st.columns(2)
+
+col_r1.metric("Area (m²)", f"{area:,.2f}")
+col_r2.metric("Bulk Volume (m³)", f"{bulk_volume:,.2f}")
+col_r1.metric("Net Volume (m³)", f"{net_volume:,.2f}")
+col_r2.metric("Pore Volume (m³)", f"{pore_volume:,.2f}")
+
+st.metric("🔥 Hydrocarbon Pore Volume (HCPV)", f"{hcpv:,.2f} m³")
+
+st.caption("""
+Perhitungan ini merupakan estimasi cepat.  
+Untuk perhitungan STOIIP/GIIP lengkap, gunakan bagian awal aplikasi (volumetrik utama).
+""")
