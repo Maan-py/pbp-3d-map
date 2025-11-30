@@ -695,3 +695,10 @@ else:
     else:
         st.warning("⚠ Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
         st.dataframe(df, use_container_width=True)
+
+# === TAB 5: FITUR EKSTENSI ===
+from extra_features import run_extra_features
+
+tab_extra = st.tabs(["🧩 Fitur Ekstensi"])[0]
+with tab_extra:
+    run_extra_features(df)
