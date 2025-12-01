@@ -16,12 +16,13 @@
 10.   [Bintang Jati Kesuma S - 123230075]
 11.   [Nisrina Salsabila - 123230004]
 12.   [Muhammad Daffa - 123230203]
-13.   [Muhammad Diyan Alkautsar - 123230019]
-14.   [Andhiko Sakti Wibowo - 123230228]
-15.   [Andin Muhammad Nurjalin - 123230201]
-16.   [Rasyid Tri Sasongko - 123230043]
-17.   [Nasarudin - 123230020]
-18.   [Muhammad Syahrial Abidin - 123230027]
+13.   [Dewa Setya Bagus - 123230063]
+14.   [Muhammad Diyan Alkautsar - 123230019]
+15.   [Andhiko Sakti Wibowo - 123230228]
+16.   [Andin Muhammad Nurjalin - 123230201]
+17.   [Rasyid Tri Sasongko - 123230043]
+18.   [Nasarudin - 123230020]
+19.   [Muhammad Syahrial Abidin - 123230027]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
