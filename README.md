@@ -22,6 +22,7 @@
 16.   [Rasyid Tri Sasongko - 123230043]
 17.   [Nasarudin - 123230020]
 18.   [Muhammad Syahrial Abidin - 123230027]
+19.   [Adinda - 123230103]
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
