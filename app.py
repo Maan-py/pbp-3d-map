@@ -34,8 +34,8 @@ st.markdown("""
 # FUNGSI HELPER UNTUK EXPORT LAPORAN VOLUMETRIK
 # -------------------------------------------------------------------
 def create_volumetric_report_pdf(vol_gas_cap, vol_oil_zone, vol_total_res,
-                                 goc_input, woc_input,
-                                 num_points, x_range, y_range, z_range):
+                                goc_input, woc_input,
+                                num_points, x_range, y_range, z_range):
     """Membuat laporan volumetrik dalam format PDF (ringkasan)"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -252,6 +252,16 @@ with st.sidebar:
                 st.dataframe(df_upload.head(), use_container_width=True)
                 
                 df_upload.columns = [c.upper() for c in df_upload.columns]
+
+                # Fitur: Mengecek kekosongan data & integritas awal
+                if df_upload.empty:
+                    st.error("❌ Eits, file ini kosong !")
+                    st.stop() # Stop program biar gak error di bawah
+                
+                # Cek sekilas apakah data aman
+                if {'X', 'Y', 'Z'}.issubset(df_upload.columns):
+                    st.toast("✅ Data Integrity Check: OK", icon="🛡")
+                    
                 required_cols = {'X', 'Y', 'Z'}
                 
                 if required_cols.issubset(df_upload.columns):
@@ -405,12 +415,162 @@ else:
         c_res1, c_res2 = st.columns(2)
         c_res1.metric("🔥 GIIP (Gas In Place)", f"{giip/1e9:.2f} BCF", help="Miliar Kaki Kubik")
         c_res2.metric("🛢 STOIIP (Oil In Place)", f"{stoiip/1e6:.2f} MMbbls", help="Juta Barel Minyak")
+        # -------------------------------------------------------------------
+#  🔥  STOIIP / GIIP SENSITIVITY CALCULATOR (DIPERBAIKI)
+# -------------------------------------------------------------------
+
+st.markdown("## 📈 STOIIP & GIIP Sensitivity Calculator")
+
+with st.expander("⚙ Pengaturan Sensitivity", expanded=True):
+
+    sweep_param = st.selectbox(
+        "Parameter yang di-sweep:",
+        ["Porosity (ϕ)", "Water Saturation (Sw)", "NTG", "Bo", "Bg"]
+    )
+
+    sweep_min = st.number_input("Nilai Minimum Sweep", value=0.1)
+    sweep_max = st.number_input("Nilai Maksimum Sweep", value=0.4)
+    sweep_step = st.number_input("Step Sweep", value=0.02)
+
+    run_sensitivity = st.button("🚀 Jalankan Sensitivity Analysis")
+
+
+# ------ KODE SENSITIVITY DI LUAR EXPANDER ------
+if run_sensitivity:
+
+    sweep_values = np.arange(sweep_min, sweep_max + sweep_step, sweep_step)
+    results = []
+
+    for v in sweep_values:
+
+        # salin parameter asli
+        s_phi = porosity
+        s_sw  = sw
+        s_ntg = ntg
+        s_bo  = bo
+        s_bg  = bg
+
+        # ganti parameter sesuai sweep
+        if sweep_param == "Porosity (ϕ)":      s_phi = v
+        elif sweep_param == "Water Saturation (Sw)": s_sw = v
+        elif sweep_param == "NTG":             s_ntg = v
+        elif sweep_param == "Bo":              s_bo = v
+        elif sweep_param == "Bg":              s_bg = v
+
+        # hitung ulang STOIIP / GIIP
+        s_stoiip = (vol_oil_zone * s_ntg * s_phi * (1 - s_sw)) / s_bo
+        s_giip   = (vol_gas_cap *  s_ntg * s_phi * (1 - s_sw)) / s_bg
+
+        results.append([v, s_stoiip/1e6, s_giip/1e9])  # MMbbls & BCF
+
+    # ---- BUAT DATAFRAME FINAL ----
+    df_sens = pd.DataFrame(
+        results,
+        columns=["Parameter Value", "STOIIP (MMbbls)", "GIIP (BCF)"]
+    )
+
+    st.markdown("### 📊 Hasil Sensitivity")
+    st.dataframe(df_sens, use_container_width=True)
+
+    # ---- Grafik ----
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_sens["Parameter Value"],
+        y=df_sens["STOIIP (MMbbls)"],
+        mode='lines+markers',
+        name="STOIIP (MMbbls)"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_sens["Parameter Value"],
+        y=df_sens["GIIP (BCF)"],
+        mode='lines+markers',
+        name="GIIP (BCF)"
+    ))
+
+    fig.update_layout(
+        title=f"Sensitivity Result — {sweep_param}",
+        xaxis_title=sweep_param,
+        yaxis_title="Volume",
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ---- Download Sensitivity Result ----
+    csv_sens = df_sens.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="⬇ Download Sensitivity (CSV)",
+        data=csv_sens,
+        file_name="sensitivity_result.csv",
+        mime="text/csv"
+    )
+            # ===============================================
+        #  🤖 NEW FEATURE: SMART ASSISTANT INTEGRATION
+        # ===============================================
+    st.markdown("---")
+    st.subheader("🤖 Smart Assistant: Interpretasi Otomatis")
+        
+    with st.container(border=True):
+        col_assist1, col_assist2 = st.columns([1, 2])
+            
+            # Kolom Kiri: Analisis Kedalaman Sederhana
+    with col_assist1:
+        st.write("#### 📝 Ringkasan Lapangan")
+        avg_depth = df['Z'].mean()
+                
+                # Logic: Kategori Kedalaman
+        if avg_depth < 1000:
+            depth_status = "Dangkal (Shallow)"
+            depth_icon = "☀️"
+            depth_desc = "Biaya pengeboran relatif murah."
+        elif avg_depth < 2500:
+            depth_status = "Menengah (Medium)"
+            depth_icon = "🌊"
+            depth_desc = "Operasional standar."
+        else:
+            depth_status = "Dalam (Deep)"
+            depth_icon = "⚓"
+            depth_desc = "Memerlukan rig spesifikasi tinggi."
+                
+        st.metric(label="Rata-rata Kedalaman", value=f"{avg_depth:.0f} m", delta=depth_status, delta_color="off")
+        st.info(f"{depth_icon} {depth_desc}")
+
+            # Kolom Kanan: Analisis Detail (Logic If-Else)
+        with col_assist2:
+            st.write("#### 🧠 Analisis Reservoir")
+            analysis_points = []
+                
+                # Logic 1: Kualitas Batuan (Porositas)
+        if porosity >= 0.25:
+             analysis_points.append(f"✅ **Kualitas Batuan Sangat Baik** (Porositas {porosity*100:.0f}%): Batuan memiliki ruang pori yang besar, minyak mudah tersimpan.")
+        elif porosity >= 0.15:
+            analysis_points.append(f"⚖️ **Kualitas Batuan Cukup Baik** (Porositas {porosity*100:.0f}%): Kualitas reservoir standar industri.")
+        else:
+             analysis_points.append(f"⚠️ **Kualitas Batuan Rendah** (Porositas {porosity*100:.0f}%): Batuan 'tight', mungkin membutuhkan stimulasi (fracking).")
+
+                # Logic 2: Skala Cadangan (STOIIP)
+        stoiip_mmbbls = stoiip / 1e6
+        if stoiip_mmbbls > 50:
+            analysis_points.append(f"🌟 **Potensi Besar (Giant Field)**: Cadangan {stoiip_mmbbls:.1f} MMbbls sangat ekonomis dan strategis.")
+        elif stoiip_mmbbls > 5:
+            analysis_points.append(f"💰 **Potensi Komersial**: Cadangan {stoiip_mmbbls:.1f} MMbbls layak dikembangkan secara ekonomi.")
+        else:
+            analysis_points.append(f"📉 **Potensi Marginal**: Cadangan {stoiip_mmbbls:.1f} MMbbls tergolong kecil, perlu perhitungan biaya yang ketat.")
+                
+                # Logic 3: Fluid Contact Warning
+        if (woc_input - goc_input) > 0 and (woc_input - goc_input) < 10:
+            analysis_points.append("🚨 **Warning Zona Minyak**: Zona minyak sangat tipis (< 10m). Hati-hati terhadap 'coning' air atau gas saat produksi.")
+                
+                # Render Bullet Points
+        for point in analysis_points:
+            st.markdown(point)
+        # ===============================================
 
         # --- EXPORT LAPORAN VOLUMETRIK ---
-        st.markdown("### 📄 Export Laporan Volumetrik")
-        col_exp1, col_exp2, col_exp3 = st.columns(3)
+st.markdown("### 📄 Export Laporan Volumetrik")
+col_exp1, col_exp2, col_exp3 = st.columns(3)
         
-        with col_exp1:
+with col_exp1:
             try:
                 pdf_buffer = create_volumetric_report_pdf(
                     vol_gas_cap, vol_oil_zone, vol_total_res,
@@ -429,51 +589,52 @@ else:
             except Exception as e:
                 st.error(f"Error membuat PDF: {e}")
         
-        with col_exp2:
-            try:
-                excel_buffer = create_volumetric_report_excel(
-                    vol_gas_cap, vol_oil_zone, vol_total_res,
-                    goc_input, woc_input,
-                    len(df),
-                    (df['X'].min(), df['X'].max()),
-                    (df['Y'].min(), df['Y'].max()),
-                    (df['Z'].min(), df['Z'].max()),
-                    df
-                )
-                st.download_button(
-                    label="📊 Download Excel Report",
-                    data=excel_buffer,
-                    file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            except Exception as e:
-                st.error(f"Error membuat Excel: {e}")
+with col_exp2:
+    try:
+        excel_buffer = create_volumetric_report_excel(
+            vol_gas_cap, vol_oil_zone, vol_total_res,
+            goc_input, woc_input,
+            len(df),
+            (df['X'].min(), df['X'].max()),
+            (df['Y'].min(), df['Y'].max()),
+            (df['Z'].min(), df['Z'].max()),
+            df
+            )
+        st.download_button(
+            label="📊 Download Excel Report",
+            data=excel_buffer,
+            file_name=f"volumetric_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except Exception as e:
+        st.error(f"Error membuat Excel: {e}")
         
-        with col_exp3:
-            try:
-                grid_df = pd.DataFrame({
-                    'X': grid_x.flatten(),
-                    'Y': grid_y.flatten(),
-                    'Z': grid_z.flatten()
-                })
-                grid_csv = grid_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Grid Data (CSV)",
-                    data=grid_csv,
-                    file_name=f"grid_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-            except Exception as e:
-                st.error(f"Error membuat CSV: {e}")
+with col_exp3:
+    try:
+        grid_df = pd.DataFrame({
+            'X': grid_x.flatten(),
+            'Y': grid_y.flatten(),
+            'Z': grid_z.flatten()
+            })
+        grid_csv = grid_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Grid Data (CSV)",
+            data=grid_csv,
+            file_name=f"grid_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+            )
+    except Exception as e:
+            st.error(f"Error membuat CSV: {e}")
 
         # --- TABS VISUALISASI (5 TAB) ---
       # --- TABS VISUALISASI (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🗺 Peta Kontur 2D",
     "🧊 Model 3D",
     "📋 Data Mentah",
     "✂ Penampang (Baru)",
-    "🔥 Heatmap Property"
+    "🔥 Heatmap Property",
+    "⭕ Perbandingan 3D (Before After)"
 ])
 
 # pastikan ada minimal info untuk min_z / max_z (dipakai di beberapa tab)
@@ -587,25 +748,85 @@ if len(df) >= 4:
             st.info("Export PNG 2D tidak tersedia (butuh orca/kaleido terpasang).")
 
     # === TAB 2: 3D ===
+    # === TAB 2: 3D ===
     with tab2:
+        st.subheader("🧊 Model 3D Reservoir & Sumur")
+        
+        # 1. Inisialisasi Figure
         fig_3d = go.Figure()
-        fig_3d.add_trace(go.Surface(z=grid_z, x=grid_x, y=grid_y, colorscale='Earth_r', opacity=0.9, name='Structure'))
 
+        # 2. Plot Permukaan Struktur (Surface)
+        fig_3d.add_trace(go.Surface(
+            z=grid_z, 
+            x=grid_x, 
+            y=grid_y, 
+            colorscale='Earth_r', 
+            opacity=0.9, 
+            name='Structure'
+        ))
+
+        # 3. Fungsi Helper untuk Bidang Kontak Fluida
         def create_plane(z_lvl, color, name):
-            return go.Surface(z=z_lvl * np.ones_like(grid_z), x=grid_x, y=grid_y,
-                              colorscale=[[0, color], [1, color]], opacity=0.4, showscale=False, name=name)
+            return go.Surface(
+                z=z_lvl * np.ones_like(grid_z), 
+                x=grid_x, 
+                y=grid_y,
+                colorscale=[[0, color], [1, color]], 
+                opacity=0.4, 
+                showscale=False, 
+                name=name
+            )
 
+        # 4. Plot GOC dan WOC
         fig_3d.add_trace(create_plane(goc_input, 'red', 'GOC'))
         fig_3d.add_trace(create_plane(woc_input, 'blue', 'WOC'))
 
-        for _, row in df.iterrows():
-            fig_3d.add_trace(go.Scatter3d(
-                x=[row['X'], row['X']], y=[row['Y'], row['Y']], z=[min_z, row['Z']],
-                mode='lines+markers', marker=dict(size=3, color='black'), line=dict(color='black', width=4), showlegend=False
-            ))
+        # 5. --- FITUR BARU: VISUALISASI SUMUR (WELLS) ---
+        # Menambahkan checkbox interaktif
+        st.markdown("##### 🛤 Kontrol Visualisasi")
+        show_wells = st.checkbox("Tampilkan Jalur Sumur (Wells)", value=True)
+        
+        if show_wells:
+            # Loop setiap titik data untuk membuat garis sumur
+            for index, row in df.iterrows():
+                # Menentukan titik atas sumur. 
+                # Kita pakai min_z (titik teratas struktur) agar skala visualnya pas.
+                well_top = min_z 
+                
+                # Gambar Garis Sumur (Pipa)
+                fig_3d.add_trace(go.Scatter3d(
+                    x=[row['X'], row['X']], 
+                    y=[row['Y'], row['Y']], 
+                    z=[well_top, row['Z']], # Dari atas struktur ke titik target
+                    mode='lines',
+                    line=dict(color='grey', width=3), # Warna abu-abu pipa
+                    name=f'Well-{index+1}',
+                    showlegend=False,
+                    hoverinfo='text',
+                    text=f"Well-{index+1}<br>X: {row['X']}<br>Y: {row['Y']}<br>Depth: {row['Z']}m"
+                ))
+                
+                # Gambar Marker (Titik Target) di ujung bawah
+                fig_3d.add_trace(go.Scatter3d(
+                    x=[row['X']], y=[row['Y']], z=[row['Z']],
+                    mode='markers',
+                    marker=dict(size=5, color='black', symbol='diamond'), # Ikon diamond biar keren
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+        # -----------------------------------------------
 
-        fig_3d.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Depth', zaxis=dict(autorange="reversed")),
-                             height=650, margin=dict(l=0, r=0, b=0, t=0))
+        # 6. Layout & Render
+        fig_3d.update_layout(
+            scene=dict(
+                xaxis_title='X (East)', 
+                yaxis_title='Y (North)', 
+                zaxis_title='Depth (TVD)', 
+                zaxis=dict(autorange="reversed") # Membalik sumbu Z agar kedalaman ke bawah
+            ),
+            height=650, 
+            margin=dict(l=0, r=0, b=0, t=0)
+        )
         st.plotly_chart(fig_3d, use_container_width=True)
 
     # === TAB 3: DATA MENTAH ===
@@ -685,28 +906,105 @@ if len(df) >= 4:
                                data=heat_df.to_csv(index=False),
                                file_name=f"heatmap_{option.replace(' ','')}{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                mime="text/csv")
+            
+      # === TAB 6: PERBANDINGAN 3D BEFORE–AFTER ===
+    with tab6:
+        st.subheader("⭕ Perbandingan 3D Sebelum–Sesudah")
+        st.info("Upload dua dataset untuk melihat perubahan struktur reservoir sebelum dan sesudah.")
 
+        colA, colB = st.columns(2)
+        with colA:
+            file_before = st.file_uploader("Upload Data Before", type=["csv"])
+        with colB:
+            file_after = st.file_uploader("Upload Data After", type=["csv"])
+
+    # ===== CEK FILE =====
+        if file_before is None or file_after is None:
+            st.warning("Silakan upload kedua file (Before & After) terlebih dahulu.")
+            st.stop()
+
+    # ===== BACA DATA =====
+        df_before = pd.read_csv(file_before)
+        df_after = pd.read_csv(file_after)
+
+        required = {"X", "Y", "Z"}
+        if not required.issubset(df_before.columns) or not required.issubset(df_after.columns):
+            st.error("CSV harus memiliki kolom: X, Y, Z.")
+            st.stop()
+
+    # ===== INTERPOLASI BEFORE =====
+        dfb = df_before.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xb, yb, zb = dfb["X"].values, dfb["Y"].values, dfb["Z"].values
+
+        gx_b, gy_b = np.meshgrid(
+            np.linspace(xb.min(), xb.max(), 100),
+            np.linspace(yb.min(), yb.max(), 100)
+        )
+        gz_b = griddata((xb, yb), zb, (gx_b, gy_b), method="linear")
+
+    # ===== INTERPOLASI AFTER =====
+        dfa = df_after.groupby(["X", "Y"], as_index=False)["Z"].mean()
+        xa, ya, za = dfa["X"].values, dfa["Y"].values, dfa["Z"].values
+
+        gx_a, gy_a = np.meshgrid(
+            np.linspace(xa.min(), xa.max(), 100),
+            np.linspace(ya.min(), ya.max(), 100)
+        )
+        gz_a = griddata((xa, ya), za, (gx_a, gy_a), method="linear")
+
+    # ===== PLOT BEFORE & AFTER =====
+        from plotly.subplots import make_subplots
+
+        fig = make_subplots(
+            rows=1, cols=2,
+            specs=[[{"type": "surface"}, {"type": "surface"}]],
+            subplot_titles=("Before", "After")
+        )
+
+        fig.add_trace(go.Surface(x=gx_b, y=gy_b, z=gz_b, colorscale="Viridis"), row=1, col=1)
+        fig.add_trace(go.Surface(x=gx_a, y=gy_a, z=gz_a, colorscale="Turbo"), row=1, col=2)
+
+        fig.update_layout(height=600, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ===== SELISIH =====
+        st.subheader("📉 Selisih Elevasi (After – Before)")
+    try:
+            diff = gz_a - gz_b
+            fig_diff = go.Figure(go.Surface(
+            x=gx_a, y=gy_a, z=diff, colorscale="RdBu"
+            ))
+            fig_diff.update_layout(height=600, title="Perbedaan Elevasi")
+            st.plotly_chart(fig_diff, use_container_width=True)
+    except:
+            st.warning("Grid Before dan After tidak cocok ukurannya.")
+
+  
 # --- jika data TIDAK cukup: tampilkan pesan di masing-masing tab (tab tetap ada) ---
 else:
     # small informative content per tab to avoid NameError / empty with-blocks
-    with tab1:
-        st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
-        st.dataframe(df, use_container_width=True)
+        with tab1:
+            st.warning("Data belum cukup untuk membuat kontur. Masukkan minimal 4 titik yang menyebar.")
+            st.dataframe(df, use_container_width=True)
 
-    with tab2:
-        st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
+        with tab2:
+            st.info("Model 3D memerlukan minimal 4 titik. Tambahkan data atau gunakan 'Load Data Demo' pada sidebar.")
 
-    with tab3:
-        st.subheader("📋 Data Mentah")
-        st.dataframe(df, use_container_width=True)
-        if not df.empty:
-            st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
+        with tab3:
+            st.subheader("📋 Data Mentah")
+            st.dataframe(df, use_container_width=True)
+            if not df.empty:
+                    st.download_button("📥 Download CSV", data=df.to_csv(index=False), file_name="raw_data.csv", mime="text/csv")
 
-    with tab4:
-        st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
+        with tab4:
+            st.info("Penampang (Cross-section) akan aktif saat data cukup (>=4 titik).")
 
-    with tab5:
-        st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+        with tab5:
+            st.info("Heatmap properti akan aktif saat data cukup (>=4 titik). Kamu tetap bisa upload CSV property tapi heatmap tidak akan digenerate tanpa cukup titik.")
+
+        with tab6:
+            st.info("Perbandingan 3D Before–After memerlukan dua dataset dengan kolom X,Y,Z.")
+
 
 # === TAB 5: FITUR EKSTENSI ===
 from extra_features import run_extra_features
@@ -714,3 +1012,77 @@ from extra_features import run_extra_features
 tab_extra = st.tabs(["🧩 Fitur Ekstensi"])[0]
 with tab_extra:
     run_extra_features(df)
+
+
+# ============================
+#  PERHITUNGAN VOLUME RESERVOIR
+# ============================
+
+st.subheader("📦 Perhitungan Volume Reservoir")
+
+# Input parameter volumetrik
+col_v1, col_v2, col_v3 = st.columns(3)
+
+phi = col_v1.number_input("Porosity (ϕ)", 0.0, 1.0, 0.20)
+sw  = col_v2.number_input("Water Saturation (Sw)", 0.0, 1.0, 0.30)
+ntg = col_v3.number_input("Net-to-Gross (NTG)", 0.0, 1.0, 0.80)
+
+# ============================
+#  AUTO DETECT KOLom X, Y, Z
+# ============================
+
+possible_x = ["X", "x", "Easting", "easting", "Long", "long", "Longitude", "longitude"]
+possible_y = ["Y", "y", "Northing", "northing", "Lat", "lat", "Latitude", "latitude"]
+possible_z = ["Z", "z", "Depth", "depth", "TVD", "tvd", "Elevation", "elevation"]
+
+col_x = next((c for c in possible_x if c in df.columns), None)
+col_y = next((c for c in possible_y if c in df.columns), None)
+col_z = next((c for c in possible_z if c in df.columns), None)
+
+if col_x is None or col_y is None:
+    st.error("❌ Tidak menemukan kolom X/Y di file CSV. Harus ada koordinat X dan Y.")
+    st.stop()
+
+# Thickness (Z)
+if col_z:
+    thickness = df[col_z]
+else:
+    thickness = st.number_input("Masukkan thickness (jika kolom Z tidak tersedia)", 
+                                0.0, 500.0, 50.0)
+
+# ============================
+#  PERHITUNGAN AREA
+# ============================
+
+xmin, xmax = df[col_x].min(), df[col_x].max()
+ymin, ymax = df[col_y].min(), df[col_y].max()
+area = (xmax - xmin) * (ymax - ymin)
+
+# Volume bulk reservoir
+bulk_volume = area * (thickness.mean() if hasattr(thickness, "mean") else thickness)
+
+# Net reservoir volume
+net_volume = bulk_volume * ntg
+
+# Pore volume
+pore_volume = net_volume * phi
+
+# Hydrocarbon pore volume
+hcpv = pore_volume * (1 - sw)
+
+# ============================
+#  DISPLAY HASIL
+# ============================
+
+st.write("### 📊 Hasil Perhitungan")
+
+col_r1, col_r2 = st.columns(2)
+
+col_r1.metric("Area (m²)", f"{area:,.2f}")
+col_r2.metric("Bulk Volume (m³)", f"{bulk_volume:,.2f}")
+
+col_r1.metric("Net Volume (m³)", f"{net_volume:,.2f}")
+col_r2.metric("Pore Volume (m³)", f"{pore_volume:,.2f}")
+
+st.metric("Hydrocarbon Pore Volume (HCPV)", f"{hcpv:,.2f} m³")
+

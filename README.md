@@ -4,20 +4,27 @@
 
 ## List Kontributor
 
--   [Muhammad Luqmaan - 123230070]
--   [Salman Faris - 123230024]
--   [Reza Rasendriya Adi Putra - 123230030]
--   [Valentino Abinata - 123230013]
--   [Rheza Priya Anargya - 123230032]
--   [Gusti Rama - 123230040]
--   [Bintoro - 123230059]
--   [Imam Khusain - 123230018]
--   [Adi Setya N.P - 123230026]
--   [Bintang Jati Kesuma S - 123230075]
--   [Nisrina Salsabila - 123230004]
--   [Muhammad Daffa - 123230203]
--   [Muhammad Diyan Alkautsar - 123230019]
--   [Adinda - 123230103]
+patch-2
+1. [Muhammad Luqmaan - 123230070]
+2. [Salman Faris - 123230024]
+3. [Reza Rasendriya Adi Putra - 123230030]
+4. [Valentino Abinata - 123230013]
+5. [Rheza Priya Anargya - 123230032]
+6. [Gusti Rama - 123230040]
+7. [Bintoro - 123230059]
+8. [Imam Khusain - 123230018]
+9. [Adi Setya N.P - 123230026]
+10. [Bintang Jati Kesuma S - 123230075]
+11. [Nisrina Salsabila - 123230004]
+12. [Muhammad Daffa - 123230203]
+13. [Muhammad Diyan Alkautsar - 123230019]
+14. [Adinda - 123230103]
+15. [Andhiko Sakti Wibowo - 123230228]
+16. [Andin Muhammad Nurjalin - 123230201]
+17. [Rasyid Tri Sasongko - 123230043]
+18. [Nasarudin - 123230020]
+19. [Muhammad Syahrial Abidin - 123230027]
+
 
 **Peta Struktur Interaktif & Pemodelan Kontak Fluida**
 
