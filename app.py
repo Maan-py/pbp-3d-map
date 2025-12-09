@@ -209,6 +209,7 @@ with st.sidebar:
         st.markdown(":red[Gas-Oil Contact (GOC)]")
         goc_input = st.number_input(
             "",
+# end of part 1
             value=float(min_z + (max_z - min_z) * 0.3),
             key="goc",
             label_visibility="collapsed"
@@ -410,7 +411,6 @@ else:
         col_vol1.metric("🔴 Gross Gas Volume", fmt_vol(vol_gas_cap), help="Volume batuan gas cap")
         col_vol2.metric("🟢 Gross Oil Volume", fmt_vol(vol_oil_zone), help="Volume batuan oil zone")
         col_vol3.metric("🔵 Total Reservoir", fmt_vol(vol_total_res), help="Total volume batuan reservoir")
-
         st.caption("Ekspektasi Cadangan Minyak & Gas (In-Place):")
         c_res1, c_res2 = st.columns(2)
         c_res1.metric("🔥 GIIP (Gas In Place)", f"{giip/1e9:.2f} BCF", help="Miliar Kaki Kubik")
@@ -626,15 +626,15 @@ with col_exp3:
     except Exception as e:
             st.error(f"Error membuat CSV: {e}")
 
-        # --- TABS VISUALISASI (5 TAB) ---
-      # --- TABS VISUALISASI (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        # --- TABS VISUALISASI (7 TAB: added Isopach) ---
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🗺 Peta Kontur 2D",
     "🧊 Model 3D",
     "📋 Data Mentah",
     "✂ Penampang (Baru)",
     "🔥 Heatmap Property",
-    "⭕ Perbandingan 3D (Before After)"
+    "⭕ Perbandingan 3D (Before After)",
+    "🟧 Isopach Map"
 ])
 
 # pastikan ada minimal info untuk min_z / max_z (dipakai di beberapa tab)
@@ -748,7 +748,6 @@ if len(df) >= 4:
             st.info("Export PNG 2D tidak tersedia (butuh orca/kaleido terpasang).")
 
     # === TAB 2: 3D ===
-    # === TAB 2: 3D ===
     with tab2:
         st.subheader("🧊 Model 3D Reservoir & Sumur")
         
@@ -814,21 +813,94 @@ if len(df) >= 4:
                     showlegend=False,
                     hoverinfo='skip'
                 ))
-        # -----------------------------------------------
+    # ... lanjutkan ke tab3..tab6 (sudah di bagian 2); sekarang tambahkan TAB 7 (ISOPACH)
+    # === TAB 7: ISOPACH MAP ===
+    with tab7:
+        st.subheader("🟧 Isopach Map (Ketebalan Formasi)")
 
-        # 6. Layout & Render
-        fig_3d.update_layout(
-            scene=dict(
-                xaxis_title='X (East)', 
-                yaxis_title='Y (North)', 
-                zaxis_title='Depth (TVD)', 
-                zaxis=dict(autorange="reversed") # Membalik sumbu Z agar kedalaman ke bawah
-            ),
-            height=650, 
-            margin=dict(l=0, r=0, b=0, t=0)
+        st.markdown("""
+        **Isopach = Thickness Map**  
+        Mengukur *perbedaan* antara horizon **Top** dan **Base**.
+        """)
+
+        iso_mode = st.radio(
+            "Mode Input:",
+            ["Gunakan Z (Top + Base otomatis)", "Upload Top & Base"]
         )
-        st.plotly_chart(fig_3d, use_container_width=True)
 
+        # ===================== CASE 1: PAKAI Z ====================
+        if iso_mode == "Gunakan Z (Top + Base otomatis)":
+            st.info("Top = nilai Z terendah pada tiap XY, Base = nilai Z tertinggi.")
+
+            df_tb = df.copy()
+            df_top = df_tb.groupby(["X","Y"])["Z"].min().reset_index()
+            df_base = df_tb.groupby(["X","Y"])["Z"].max().reset_index()
+
+            df_iso = df_top.copy()
+            # merge lebih aman berdasarkan X,Y agar index matching benar
+            df_iso = pd.merge(df_top, df_base, on=["X","Y"], suffixes=("_top","_base"))
+            df_iso["Thickness"] = df_iso["Z_base"] - df_iso["Z_top"]
+
+        # ===================== CASE 2: UPLOAD =====================
+        else:
+            top_file = st.file_uploader("Upload Top (kolom: X,Y,Z)", type="csv")
+            base_file = st.file_uploader("Upload Base (kolom: X,Y,Z)", type="csv")
+
+            if top_file and base_file:
+                df_top = pd.read_csv(top_file)
+                df_base = pd.read_csv(base_file)
+
+                if not {"X","Y","Z"}.issubset(df_top.columns) or not {"X","Y","Z"}.issubset(df_base.columns):
+                    st.error("Format harus punya X,Y,Z!")
+                    st.stop()
+
+                # merge aman berdasarkan X,Y
+                df_iso = pd.merge(df_top, df_base, on=["X","Y"], suffixes=("_top","_base"))
+                df_iso["Thickness"] = df_iso["Z_base"] - df_iso["Z_top"]
+            else:
+                st.info("Menunggu file upload...")
+                st.stop()
+
+        # -------- INTERPOLASI THICKNESS --------
+        try:
+            grid_thick = griddata(
+                (df_iso["X"],df_iso["Y"]),
+                df_iso["Thickness"],
+                (grid_x,grid_y),
+                method="cubic"
+            )
+        except Exception:
+            grid_thick = griddata(
+                (df_iso["X"],df_iso["Y"]),
+                df_iso["Thickness"],
+                (grid_x,grid_y),
+                method="linear"
+            )
+
+        # -------------- PLOT ---------------------
+        fig_iso = go.Figure(go.Contour(
+            x=np.linspace(df['X'].min(), df['X'].max(), grid_thick.shape[1]),
+            y=np.linspace(df['Y'].min(), df['Y'].max(), grid_thick.shape[0]),
+            z=grid_thick,
+            colorscale="Oranges",
+            contours=dict(showlabels=True),
+            colorbar=dict(title="Thickness (m)")
+        ))
+        fig_iso.update_layout(height=650, title="Isopach Map")
+        st.plotly_chart(fig_iso, use_container_width=True)
+
+        # download CSV
+        iso_df = pd.DataFrame({
+            "X":grid_x.flatten(),
+            "Y":grid_y.flatten(),
+            "Thickness":grid_thick.flatten()
+        }).dropna()
+        st.download_button(
+            "⬇ Download Isopach CSV",
+            iso_df.to_csv(index=False),
+            file_name=f"isopach_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
     # === TAB 3: DATA MENTAH ===
     with tab3:
         st.dataframe(df, use_container_width=True)
@@ -906,8 +978,8 @@ if len(df) >= 4:
                                data=heat_df.to_csv(index=False),
                                file_name=f"heatmap_{option.replace(' ','')}{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                mime="text/csv")
-            
-      # === TAB 6: PERBANDINGAN 3D BEFORE–AFTER ===
+
+    # === TAB 6: PERBANDINGAN 3D BEFORE–AFTER ===
     with tab6:
         st.subheader("⭕ Perbandingan 3D Sebelum–Sesudah")
         st.info("Upload dua dataset untuk melihat perubahan struktur reservoir sebelum dan sesudah.")
@@ -918,12 +990,12 @@ if len(df) >= 4:
         with colB:
             file_after = st.file_uploader("Upload Data After", type=["csv"])
 
-    # ===== CEK FILE =====
+        # ===== CEK FILE =====
         if file_before is None or file_after is None:
             st.warning("Silakan upload kedua file (Before & After) terlebih dahulu.")
             st.stop()
 
-    # ===== BACA DATA =====
+        # ===== BACA DATA =====
         df_before = pd.read_csv(file_before)
         df_after = pd.read_csv(file_after)
 
@@ -932,7 +1004,7 @@ if len(df) >= 4:
             st.error("CSV harus memiliki kolom: X, Y, Z.")
             st.stop()
 
-    # ===== INTERPOLASI BEFORE =====
+        # ===== INTERPOLASI BEFORE =====
         dfb = df_before.groupby(["X", "Y"], as_index=False)["Z"].mean()
         xb, yb, zb = dfb["X"].values, dfb["Y"].values, dfb["Z"].values
 
@@ -942,7 +1014,7 @@ if len(df) >= 4:
         )
         gz_b = griddata((xb, yb), zb, (gx_b, gy_b), method="linear")
 
-    # ===== INTERPOLASI AFTER =====
+        # ===== INTERPOLASI AFTER =====
         dfa = df_after.groupby(["X", "Y"], as_index=False)["Z"].mean()
         xa, ya, za = dfa["X"].values, dfa["Y"].values, dfa["Z"].values
 
@@ -952,7 +1024,7 @@ if len(df) >= 4:
         )
         gz_a = griddata((xa, ya), za, (gx_a, gy_a), method="linear")
 
-    # ===== PLOT BEFORE & AFTER =====
+        # ===== PLOT BEFORE & AFTER =====
         from plotly.subplots import make_subplots
 
         fig = make_subplots(
@@ -967,16 +1039,16 @@ if len(df) >= 4:
         fig.update_layout(height=600, margin=dict(l=10, r=10, t=40, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
-    # ===== SELISIH =====
+        # ===== SELISIH =====
         st.subheader("📉 Selisih Elevasi (After – Before)")
-    try:
+        try:
             diff = gz_a - gz_b
             fig_diff = go.Figure(go.Surface(
             x=gx_a, y=gy_a, z=diff, colorscale="RdBu"
             ))
             fig_diff.update_layout(height=600, title="Perbedaan Elevasi")
             st.plotly_chart(fig_diff, use_container_width=True)
-    except:
+        except:
             st.warning("Grid Before dan After tidak cocok ukurannya.")
 
   
@@ -1004,7 +1076,6 @@ else:
 
         with tab6:
             st.info("Perbandingan 3D Before–After memerlukan dua dataset dengan kolom X,Y,Z.")
-
 
 # === TAB 5: FITUR EKSTENSI ===
 from extra_features import run_extra_features
@@ -1085,4 +1156,3 @@ col_r1.metric("Net Volume (m³)", f"{net_volume:,.2f}")
 col_r2.metric("Pore Volume (m³)", f"{pore_volume:,.2f}")
 
 st.metric("Hydrocarbon Pore Volume (HCPV)", f"{hcpv:,.2f} m³")
-
